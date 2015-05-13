@@ -6,7 +6,7 @@
 
 This App implements a solver for equations of the type Ax=b, where A is constant but where we have a set of possible b. Both the matrix A and the vectors b are randomly generated. This App always runs both the DFE and the CPU implementation and compares respective times taken.
 
-This App requires [maxpower](https://github.com/maxeler/maxpower) Maxeler standard library.
+####This App requires [maxpower](https://github.com/maxeler/maxpower) Maxeler standard library.####
 
 ## Content
 
