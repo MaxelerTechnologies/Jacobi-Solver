@@ -1,0 +1,107 @@
+package com.maxeler.publicdemos.jacobi;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFloat;
+import com.maxeler.maxcompiler.v2.managers.DFEManager;
+import com.maxeler.maxcompiler.v2.managers.DFEModel;
+
+public class JacobiAppParams extends EngineParameters {
+
+	private static final String isSimulation        = "isSimulation";
+	private static final String floatType           = "floatType";
+	private static final String isNativeSim         = "isNativeSim";
+	private static final String maxDimLen           = "maxDimLen";
+	private static final String C                   = "C";
+	private static final String pipeLineFactor      = "pipeLineFactor";
+	private static final String isUseFPMA           = "isUseFPMA";
+	private static final String CEReplicationFactor = "CEReplicationFactor";
+	private static final String isBuffGce           = "isBuffGce";
+	private static final String clockFrequency      = "clockFrequency";
+
+	public  double getPipelineFactor()
+	{
+		return getParam(pipeLineFactor);
+	}
+
+	public boolean getIsNativeSim() {
+		return getParam(isNativeSim);
+	}
+
+	public boolean getIsSimulation() {
+		return getParam(isSimulation);
+	}
+
+	public DFEFloat getFloatType() {
+		return getParam(floatType);
+	}
+
+	public int getMaxDimLen() {
+		return getParam(maxDimLen);
+	}
+	public int getC() {
+		return getParam(C);
+	}
+
+	public boolean getIsUseFPMA() {
+		return getParam(isUseFPMA);
+	}
+
+	public int getCEReplicationFactor() {
+		return getParam(CEReplicationFactor);
+	}
+
+	public boolean getIsBuffGce() {
+		return getParam(isBuffGce);
+	}
+
+	public int getClockFrequency() {
+		return getParam(clockFrequency);
+	}
+
+	public JacobiAppParams(String[] args) {
+		super(args);
+	}
+
+	public JacobiAppParams(String[] args, String... staticOverrides) {
+		super(args, staticOverrides);
+	}
+
+	public void addParamsToMaxfile(DFEManager mgr) {
+		mgr.addMaxFileConstant(isSimulation, getIsSimulation() ? 1 : 0);
+		mgr.addMaxFileConstant(C, getC());
+		mgr.addMaxFileConstant(maxDimLen, getMaxDimLen());
+		//mgr.addMaxFileConstant(getBuildName(), 1);
+	}
+
+	@Override
+	protected void declarations() {
+		declareParam("DFEModel",          DataType.DFEMODEL, DFEModel.VECTIS);
+
+		declareParam(isSimulation,        DataType.BOOL,    true);
+		declareParam(isNativeSim,         DataType.BOOL,    false);
+		declareParam(floatType,           DataType.DFEFLOAT, Kernel.dfeFloat(11, 53));
+		declareParam(maxDimLen,           DataType.INT, 8);
+		declareParam(C,                   DataType.INT, 4);
+		declareParam(pipeLineFactor,      DataType.DOUBLE, 0.76);
+		declareParam(isUseFPMA,           DataType.BOOL,    true);
+		declareParam(CEReplicationFactor, DataType.INT, 7);
+		declareParam(isBuffGce,           DataType.BOOL, true);
+		declareParam(clockFrequency,      DataType.INT, 125);
+	}
+
+	@Override
+	protected void deriveParameters() {
+	}
+
+	@Override
+	public String getBuildName() {
+		String buildType = getIsSimulation() ? "Sim" : "HW";
+		return "jacobi_" + getDFEModel().toString() + "_" + getTarget().toString() + "_" + getMaxDimLen() + "D_" + getC() + "C_" + "_" + getClockFrequency() + "MHz";
+	}
+
+	@Override
+	protected void validate() {
+	}
+
+}

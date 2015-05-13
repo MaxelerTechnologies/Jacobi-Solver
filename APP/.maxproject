@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<maxCompilerManager version="2">
+<enginePart internalEngineSubproject="JacobiSolver_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/JacobiSolver_EngineCode/bin" projectName="JacobiSolver"/>
+<cpuPart internalCpuSubproject="JacobiSolver_CPUCode"/>
+<watchedFiles/>
+</maxCompilerManager>

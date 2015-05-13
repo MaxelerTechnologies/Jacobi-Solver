@@ -1,0 +1,57 @@
+package com.maxeler.publicdemos.jacobi;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.Effort;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.Level;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.standard.Manager;
+import com.maxeler.maxcompiler.v2.managers.standard.Manager.IOType;
+
+
+public class JacobiBuilder {
+
+	public static void main(String[] args) {
+		JacobiAppParams params = new JacobiAppParams(args);
+		Manager m = new Manager(params);
+		params.addParamsToMaxfile(m);
+		m.getCurrentKernelConfig().optimization.setCEReplicationNumPartitions(params.getCEReplicationFactor());
+		m.getCurrentKernelConfig().optimization.setUseGlobalClockBuffer(params.getIsBuffGce());
+		m.setClockFrequency(params.getClockFrequency());
+		BuildConfig build_config = new BuildConfig(Level.FULL_BUILD);
+		build_config.setBuildEffort(Effort.VERY_HIGH);
+		build_config.setMPPRCostTableSearchRange( 1, 8 );
+		build_config.setMPPRParallelism( 2 );
+		m.setBuildConfig(build_config);
+
+
+		Kernel k = new JacobiKernel( m.makeKernelParameters("JacobiKernel"), params);
+
+		m.setKernel(k);
+		m.setIO(IOType.ALL_PCIE);
+		m.createSLiCinterface(modeDefault(params));//addMode(modeDefault(params));
+		m.build();
+	}
+
+	static EngineInterface modeDefault(JacobiAppParams params)
+	{
+		EngineInterface mode = new EngineInterface();
+		InterfaceParam totalEquations = mode.addParam("equation_num",CPUTypes.UINT64);
+		InterfaceParam C = mode.addConstant(params.getC());
+		InterfaceParam maxIter = mode.addParam("max_iter",CPUTypes.UINT64);
+		InterfaceParam dimLen = mode.addParam("dim", CPUTypes.UINT64);
+		InterfaceParam cMultDim = C * dimLen;
+		InterfaceParam dimMultDim = dimLen * dimLen;
+		InterfaceParam preLoadCycles = (dimMultDim > cMultDim) ? dimMultDim:cMultDim;
+		InterfaceParam totalCycles = maxIter*totalEquations*dimLen + preLoadCycles;
+
+		mode.setTicks("JacobiKernel", totalCycles);
+		mode.setScalar("JacobiKernel", "total_cycles", totalCycles);
+		mode.setScalar("JacobiKernel", "dim_len", dimLen);
+		mode.setScalar("JacobiKernel", "max_iter", maxIter);
+		return mode;
+	}
+}
+

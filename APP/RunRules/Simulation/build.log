@@ -1,0 +1,85 @@
+Wed 11:12: ########################################## 
+Wed 11:12: Compiling.
+Wed 11:12: ########################################## 
+
+Wed 11:12: MaxCompiler version: 2014.2.
+Wed 11:12: Build Simulation run rule for JacobiSolver start time: Wed May 13 11:12:14 BST 2015.
+Wed 11:12: Project location: /home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP.
+Wed 11:12: Detailed build log: /home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/RunRules/Simulation/build.log.
+
+Wed 11:12: Compiling Engine Code.
+Wed 11:12: Engine building skipped (no changes on .max files).
+Wed 11:12: Compiling CPU Code.
+Wed 11:12: Run CPU project make files updating
+Wed 11:12: Executing command:
+Wed 11:12: java -jar /network-raid/opt/maxcompiler-2014.2/lib/MaxIDE/projectAdmin.jar -u /home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP Simulation 
+Wed 11:12: Command output:
+
+Wed 11:12: MaxCompiler Project Admin Tool Version 2014.2
+Wed 11:12:  Copyright Maxeler Technologies 2010 - 2014. All rights reserved.
+Wed 11:12: Handler version 2
+Wed 11:12: Updating RunRule dependent Makefiles for RunRule 'Simulation'
+Wed 11:12: 	Updating: Simulation
+Wed 11:12: Found makefiles: 1
+Wed 11:12: 	Updated: Simulation
+Wed 11:12: Run CPU make.
+Wed 11:12: make RUNRULE=Simulation 
+Wed 11:12: Command output:
+Wed 11:12: make -f Makefile.rules build
+Wed 11:12: make[1]: Entering directory `/home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/CPUCode'
+Wed 11:12: set -e; rm -f ../RunRules/Simulation/objects/c/main.d ;                                                             \
+Wed 11:12: 	  cc -M -std=gnu99 -g -O3 -Wall -Wextra -I../RunRules/Simulation/include  -I '/network-raid/opt/maxcompiler-2014.2/include/slic'  -Wno-error main.c > ../RunRules/Simulation/objects/c/main.d.$$ ;                                 \
+Wed 11:12:       sed 's,\(main\)\.o[ :]*,../RunRules/Simulation/objects/c/\1.o ../RunRules/Simulation/objects/c/main.d : ,g' < ../RunRules/Simulation/objects/c/main.d.$$ > ../RunRules/Simulation/objects/c/main.d; \
+Wed 11:12:       rm -f ../RunRules/Simulation/objects/c/main.d.$$
+Wed 11:12: make[1]: Leaving directory `/home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/CPUCode'
+Wed 11:12: make[1]: Entering directory `/home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/CPUCode'
+Wed 11:12: cc -std=gnu99 -g -O3 -Wall -Wextra -I../RunRules/Simulation/include  -I '/network-raid/opt/maxcompiler-2014.2/include/slic'  -c main.c -o ../RunRules/Simulation/objects/c/main.o
+Wed 11:12: main.c: In function 'jacobi_opt':
+Wed 11:12: main.c:25: warning: unused parameter 'C'
+Wed 11:12: main.c:25: warning: unused parameter 'init_value'
+Wed 11:12: main.c: In function 'main':
+Wed 11:12: main.c:207: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:274: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:279: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:289: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:291: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:303: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:305: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:311: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:313: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:327: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:329: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:335: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:337: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:339: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:347: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:349: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:351: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:379: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:381: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:383: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:406: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:441: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:443: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:457: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:459: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:490: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:492: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:541: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: main.c:543: warning: comparison between signed and unsigned integer expressions
+Wed 11:12: cc -std=gnu99 -g -O3 -Wall -Wextra -I../RunRules/Simulation/include  -I '/network-raid/opt/maxcompiler-2014.2/include/slic'  -o ../RunRules/Simulation/binaries/jacobi ../RunRules/Simulation/objects/maxfiles/slic_jacobi.o ../RunRules/Simulation/objects/c/main.o -g -O3  -L '/network-raid/opt/maxcompiler-2014.2/lib' -lslic -L '/network-raid/opt/maxeleros-2014.2/maxeleros/lib' -lmaxeleros -lpthread -lm -lrt 
+Wed 11:12: make[1]: Leaving directory `/home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/CPUCode'
+Wed 11:12: Build completed: Wed May 13 11:12:16 BST 2015
+
+
+Wed 11:12: ########################################## 
+Wed 11:12: Running
+Wed 11:12: ########################################## 
+Wed 11:12: Executing command:
+Wed 11:12: '/home/imilankovic/JacobiSolver_git/Jacobi-Solver/APP/RunRules/Simulation/binaries/jacobi' '-d' '2' '-b' '16' 
+Wed 11:12: Command output:
+Wed 11:12: =========>Kernel Complete, Stream Times: 2
+Wed 11:12: Dim Len     Equations    MAX ITER    Engine Time    CPU Time    Speedup
+Wed 11:12: 2           992          20          0.090          0.000       0.00        
+Wed 11:12: ==========>All Test Passed
+Wed 11:12: Process terminated with exit code 0.

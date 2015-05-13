@@ -1,0 +1,100 @@
+package com.maxeler.publicdemos.jacobi;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.SMIO;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmInput;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmOutput;
+import com.maxeler.maxcompiler.v2.statemachine.DFEsmStateValue;
+import com.maxeler.maxcompiler.v2.statemachine.kernel.KernelStateMachine;
+
+class ESKernel extends Kernel {
+
+	ESKernel(KernelParameters p) {
+		super(p);
+		DFEVar c = control.count.simpleCounter(2);
+		EnableIterator enIt = new EnableIterator(this, "enIt", 5, c.eq(3));
+		for(int i = 0; i < 5; ++i) {
+			io.output("output"+i, dfeBool()) <== enIt[i];
+		}
+	}
+}
+
+public class EnableIterator extends KernelLib {
+
+	private final DFEVar m_enable[];
+
+	public int getSize() {
+		return m_enable.length;
+	}
+
+	public EnableIterator(KernelLib owner, String name, int size, DFEVar consume) {
+		super(owner);
+		m_enable = new DFEVar[size];
+		final EnableIteratorSM sm = new EnableIteratorSM(this, size);
+		final SMIO smio;
+		smio = addStateMachine(name, sm);
+		smio.connectInput("consume", consume);
+		for(int i = 0; i < size; ++i) {
+			m_enable[i] = smio.getOutput("output"+i);
+		}
+	}
+
+	public DFEVar get(int i) {
+		return m_enable[i];
+	}
+
+	public static void main(String[] args) {
+		SimulationManager mgr = new SimulationManager("blah");
+		ESKernel kernel = new ESKernel(mgr.makeKernelParameters());
+		mgr.setKernel(kernel);
+		mgr.setKernelCycles(100);
+		mgr.runTest();
+		mgr.dumpOutput();
+	}
+}
+
+class EnableIteratorSM extends KernelStateMachine {
+
+	private final int m_size;
+
+	protected final DFEsmInput m_consume;
+
+	protected final DFEsmStateValue m_bool[];
+	protected final DFEsmOutput m_output[];
+
+	public EnableIteratorSM(KernelLib owner, int size) {
+		super(owner);
+		m_size = size;
+		m_consume = io.input("consume", dfeBool());
+		m_bool = new DFEsmStateValue[size];
+		m_output = new DFEsmOutput[size];
+		for(int i = 0; i < m_size; ++i) {
+			m_bool[i]   = state.value(dfeBool(), i==0);
+			m_output[i] = io.output("output"+i, dfeBool(), 0);
+		}
+	}
+
+	@Override
+	public void nextState() {
+		IF(m_consume) {
+			for(int i = 0; i < m_size; ++i) {
+				m_bool[i].next <== m_bool[(m_size+i-1)%m_size];
+			}
+		} ELSE {
+			for(int i = 0; i < m_size; ++i) {
+				m_bool[i].next <== m_bool[i];
+			}
+		}
+	}
+
+	@Override
+	protected void outputFunction() {
+		for(int i = 0; i < m_size; ++i) {
+			m_output[i] <== m_bool[i];
+		}
+	}
+}

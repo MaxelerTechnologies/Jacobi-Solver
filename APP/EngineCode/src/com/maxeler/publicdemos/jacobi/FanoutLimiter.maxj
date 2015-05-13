@@ -1,0 +1,102 @@
+package com.maxeler.publicdemos.jacobi;
+
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelFinalizer;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.managers.SimulationParams;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+
+/**
+ * Create tree of pipelined values to limit the fanout of an DFEVar to a maximum specified value.
+ *
+ * The construction of the tree is achieved in the KernelFinalizer.
+ */
+public class FanoutLimiter extends KernelLib implements KernelFinalizer{
+
+	private final DFEVar x;
+	private final int max;
+
+	ArrayList<DFEVar> requested = new ArrayList<DFEVar>();
+
+	public DFEVar get() {
+		requested.add(x.getType().newInstance(this));
+		return requested.get(requested.size()-1);
+	}
+
+	public FanoutLimiter(KernelLib owner, DFEVar x, int maxFanout) {
+		super(owner);
+		if(maxFanout < 2) {
+			throw new RuntimeException("Sorry, maxFanout should be 2 at least, not " + maxFanout);
+		}
+		this.x = x;
+		max = maxFanout;
+		owner.getKernel().addKernelFinalizer(this);
+	}
+
+	@Override
+	public void finalizeKernel(Kernel kernel_design) {
+		ArrayList<DFEVar> current = new ArrayList<DFEVar>(max);
+		for(int f = 0; f < max; ++f) {
+			current.add(x);
+		}
+
+		while(current.size() < requested.size()) {
+			ArrayList<DFEVar> next = new ArrayList<DFEVar>(current.size()*max);
+			for(DFEVar h : current) {
+				DFEVar v = optimization.pipeline(h);
+				for(int f = 0; f < max; ++f) {
+					next.add(v);
+				}
+			}
+			current = next;
+		}
+
+		for(int i = 0; i < requested.size(); ++i) {
+			requested[i] <== current[i];
+		}
+	}
+
+	static private class TeenyKernel extends Kernel {
+
+		private final FanoutLimiter fl;
+
+		protected TeenyKernel(KernelParameters parameters) {
+			super(parameters);
+
+			DFEVar in =io.input("input", dfeUInt(32));
+			fl = new FanoutLimiter(this, in, 3);
+
+			DFEVar sum = fl.get();
+			int nb = 10;
+			for(int i = 1; i < nb; ++i) {
+				sum = sum + stream.offset(fl.get(), i);
+			}
+
+			io.output("output", dfeUInt(32)) <== sum;
+		}
+
+	}
+
+	public static void main(String[] args) {
+		SimulationManager mgr = new SimulationManager("FanoutLimiterTest", SimulationParams.HDLSIM);
+		TeenyKernel ker = new TeenyKernel(mgr.makeKernelParameters());
+		mgr.setKernel(ker);
+
+		int size = 20;
+		double input[] = new double[size];
+		for(int i = 0; i < size; ++i) {
+			input[i] = i;
+		}
+		mgr.setInputData("input", input);
+		mgr.setKernelCycles(size);
+		mgr.runTest();
+
+		mgr.dumpOutput();
+	}
+
+
+}

@@ -1,0 +1,495 @@
+package com.maxeler.publicdemos.jacobi;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import maxpower.kernel.arithmetic.FloatingPointMultiAdder;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.KernelMath;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Mem;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Mem.DualPortMemOutputs;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Mem.RamPortMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Mem.RamPortParams;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Mem.RamWriteMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFloat;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+public class JacobiKernel extends Kernel {
+	private final  DFEFloat ioType = dfeFloat(11, 53);
+	private final  DFEFloat floatType;
+	private final  boolean isUseFPMA;
+	private final double pipeLineFactor;
+
+	private final  int C;
+	private final  int MAX_DIM_LEN;
+
+
+	public  JacobiKernel(KernelParameters parameters, JacobiAppParams params)
+	{
+		super(parameters);
+
+		debug.pushEnableNativeSimulationMath(params.getIsNativeSim());
+		floatType       = params.getFloatType();
+		MAX_DIM_LEN     = params.getMaxDimLen();
+		C               = params.getC();
+		isUseFPMA       = params.getIsUseFPMA();
+		pipeLineFactor  = params.getPipelineFactor();
+
+		int X_RAM_DEPTH = 2 * C;
+		int bitWidth    = MathUtils.bitsToAddress(X_RAM_DEPTH);
+
+		optimization.pushPipeliningFactor(pipeLineFactor);
+
+		@SuppressWarnings("unchecked")
+		RamPortParams<DFEVar> matrixRamPort[]      = new RamPortParams[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		DualPortMemOutputs<DFEVar> xInitRam[]      = new DualPortMemOutputs[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		RamPortParams<DFEVar> initRamReadPort[]  = new RamPortParams[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		RamPortParams<DFEVar> initRamWritePort[] = new RamPortParams[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		RamPortParams<DFEVar> xzRamReadPort[]  = new RamPortParams[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		RamPortParams<DFEVar> xzRamWritePort[] = new RamPortParams[MAX_DIM_LEN];
+		@SuppressWarnings("unchecked")
+		DualPortMemOutputs<DFEVar> xzRamEx[]         = new DualPortMemOutputs[MAX_DIM_LEN];
+		DFEVar[] xRamBufferEx =  new DFEVar[MAX_DIM_LEN];
+		DFEVar[] zRamBufferEx = new DFEVar[MAX_DIM_LEN];
+		DFEVar matrixRam[] 		= new DFEVar[MAX_DIM_LEN];
+		DFEVar xFirstInitRam[]  	= new DFEVar[MAX_DIM_LEN];
+		DFEVar xSecondInitRam[] 	= new DFEVar[MAX_DIM_LEN];
+		DFEVar currentCycle    = control.count.simpleCounter(32);
+		DFEVar dimActualLen    = io.scalarInput("dim_len", dfeUInt(32));
+		DFEVar totalCycles     = io.scalarInput("total_cycles", dfeUInt(32));
+		DFEVar maxIterTimes    = io.scalarInput("max_iter", dfeUInt(32));
+		DFEVar dimMultDim      = dimActualLen * dimActualLen;
+		DFEVar cMultDim        = C * dimActualLen;
+		DFEVar preLoadCycles   = dimMultDim > cMultDim ? dimMultDim:cMultDim;
+		DFEVar isPreLoadData   = currentCycle < preLoadCycles;
+		DFEVar eachBlockCycles = maxIterTimes*cMultDim;
+		DFEVar computeCycle    = control.count.makeCounter(control.count.makeParams(32).withEnable(~isPreLoadData).withMax(eachBlockCycles)).getCount();
+		CounterChain chain    = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar iter            = chain.addCounter(maxIterTimes, 1); //loop MAX_ITER
+		DFEVar ci              = chain.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));//loop i
+		DFEVar ck              = chain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));//loop k
+		DFEVar isReadFromX     = iter[0].eq(1);
+
+		preLoadCycles.watch("preLoadCycles");
+		isPreLoadData.watch("isReadPreLoad");
+		currentCycle.watch("currentCycle");
+		iter.watch("iter");
+		ci.watch("ci");
+		ck.watch("ck");
+
+		//Matrix A related staff
+		DFEVar currentCycleLTDimMultDim              = currentCycle < dimMultDim;
+		DFEVar inputMatrix                           = io.input("A", ioType, currentCycleLTDimMultDim ).cast(floatType);
+		DFEVar ramPreloadAddress                     = control.count.simpleCounter(32, dimActualLen).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));
+		CounterChain matrixRamReadAddressChain      = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar matrixRamReadAddress                  = matrixRamReadAddressChain.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));
+		matrixRamReadAddressChain.addCounter(C, 1);
+		DFEVar matrixRamAddress                      = (currentCycleLTDimMultDim) ? ramPreloadAddress:matrixRamReadAddress;
+		inputMatrix.watch("inputMatrix");
+		matrixRamAddress.watch("ramAddress");
+
+		//B Related Staff
+		DFEVar inputB                                = io.input("B", ioType, (~isPreLoadData & iter.eq(0))).cast(floatType);
+		CounterChain bRamAddressChain               = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar bRamReadAddress                       = bRamAddressChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
+		DFEVar bCurrentCycle                         = control.count.makeCounterChain(~isPreLoadData).addCounter(eachBlockCycles, 1);
+
+		bRamReadAddress.watch("bRamReadAddress");
+		inputB.watch("inputB");
+		DFEVar isNotPreLoadData                      = ~isPreLoadData;
+		FanoutLimiter notPreloadFanout              = new FanoutLimiter(this, isNotPreLoadData, 8);
+
+		CounterChain singleBRamChain = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar sbi = singleBRamChain.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(C*MAX_DIM_LEN)));
+		DFEVar sck = singleBRamChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C*MAX_DIM_LEN)));
+		DFEVar singleBRamAddr = sbi * C + sck;
+		DFEVar singleBRamWriteCond = bCurrentCycle < dimActualLen * C;
+		RamPortParams<DFEVar> singleBRamPort      = mem.makeRamPortParams(RamPortMode.READ_WRITE, singleBRamAddr, floatType) .withDataIn(inputB).withWriteEnable(singleBRamWriteCond);
+		DFEVar bValue                         = mem.ram(C*MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, singleBRamPort);
+		bValue.watch("bValue");
+		singleBRamAddr.watch("singleBRamAddress");
+
+
+		//X Init Ram Staff
+		CounterChain initRamChain 	= control.count.makeCounterChain(~isPreLoadData);
+		DFEVar initRamSelectCnt    	= initRamChain.addCounter(2, 1);
+		DFEVar initRamCurCycle     	= initRamChain.addCounter(eachBlockCycles, 1);
+		DFEVar isReadFirstInitRam  	= initRamSelectCnt.eq(0);
+		initRamSelectCnt.watch("initRamSelectCnt");
+
+		/*Last block init value do not need to read into init ram, because last block init values were read in the previous block cycles*/
+		DFEVar lastBlksStartCycle   = totalCycles - eachBlockCycles;
+		DFEVar isNotProcessLastBlks = ~isPreLoadData & currentCycle < lastBlksStartCycle;
+		DFEVar initInputCond        = (isPreLoadData & currentCycle < cMultDim) |  ( isNotProcessLastBlks&iter.eq(0));
+		DFEVar x_trans_init         = io.input("x_trans_init", ioType, initInputCond).cast(floatType);
+		initInputCond.watch("cond");
+		x_trans_init.watch("x_trans_init");
+
+		/*First X Init Ram Staff*/
+		/*in the preload cycles ,we need to load init value to init value, so first ram's  counter chain should be enable in the beginning, but second ram do not need*/
+		CounterChain xFirstInitRamAddressChain  = control.count.makeCounterChain();
+		DFEVar xFirstInitPreloadAddress          = xFirstInitRamAddressChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
+		xFirstInitPreloadAddress.watch("xFirstInitRamAddress");
+
+		CounterChain xFirstInitRamReadChain     = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar xFirstInitReadAddress             = xFirstInitRamReadChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
+
+		DFEVar firstInitRamAddress = (currentCycle < cMultDim)  ? xFirstInitPreloadAddress : xFirstInitReadAddress;
+		xFirstInitPreloadAddress  = firstInitRamAddress;
+		firstInitRamAddress.watch("address");
+		xFirstInitPreloadAddress.watch("xFirstInitPreloadAddress");
+		xFirstInitReadAddress.watch("xFirstInitReadAddress");
+
+		/*Second init Ram staff*/
+		CounterChain xSecInitRamChain = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar xSecondInitRamAddress   = xSecInitRamChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
+		xSecondInitRamAddress.watch("xSecondInitRamAddress");
+
+		//EnableIterator used for matrix Ram
+		Counter matrixCounter  = control.count.makeCounter(control.count.makeParams(32).withMax(dimActualLen));
+		DFEVar currentCycleLTDimMultMaxDim  = currentCycle<dimActualLen*MAX_DIM_LEN;
+		DFEVar matrixRamConsume             = matrixCounter.getWrap()&currentCycleLTDimMultMaxDim;
+		matrixRamConsume.watch("matrixRamConsume");
+		EnableIterator matrixRamIter       = new EnableIterator(this, "matrixRamIter", MAX_DIM_LEN, matrixRamConsume);
+
+		//EnableIterator used for X first init ram, only used in preload cycle
+		Counter initRamCounter                      = control.count.makeCounter(control.count.makeParams(32).withMax(C));
+		DFEVar currentCycleLTCMultMaxDim             = currentCycle < C*MAX_DIM_LEN;
+		DFEVar initRamConsume                        = initRamCounter.getWrap() & currentCycleLTCMultMaxDim;
+		initRamConsume.watch("initRamConsume");
+		EnableIterator initRamIter                  = new EnableIterator(this, "initRamIter", MAX_DIM_LEN, initRamConsume);
+
+		DFEVar inputInitData                         = x_trans_init;
+		FanoutLimiter matrixRamAddressFanout        = new FanoutLimiter(this, matrixRamAddress, 8);
+		FanoutLimiter inputMatrixFanout             = new FanoutLimiter(this, inputMatrix, 8);
+		FanoutLimiter inputInitDataFanout           = new FanoutLimiter(this, inputInitData, 8);
+		FanoutLimiter initRamCurCycleFanout         = new FanoutLimiter(this, initRamCurCycle, 8);
+		FanoutLimiter currentCycleFanout            = new FanoutLimiter(this, currentCycle, 8);
+		FanoutLimiter lastBlksStartCycleFanout      = new FanoutLimiter(this, lastBlksStartCycle, 8);
+
+		FanoutLimiter isReadFirstInitRamFanout      = new FanoutLimiter(this, isReadFirstInitRam, 8);
+		FanoutLimiter isNotProcessLastBlksFanout    = new FanoutLimiter(this, isNotProcessLastBlks, 8);
+		FanoutLimiter curCycleLTCMultMaxDimFanout   = new FanoutLimiter(this, currentCycleLTCMultMaxDim, 8);
+		FanoutLimiter xFirstInitPreloadAddrFanout   = new FanoutLimiter(this, xFirstInitPreloadAddress.cast(dfeUInt(bitWidth)), 8);
+		FanoutLimiter xSecondInitRamAddrFanout      = new FanoutLimiter(this, (C+xSecondInitRamAddress.cast(dfeUInt(bitWidth))), 8);
+		FanoutLimiter curCycleLTDimMultMaxDimFanout = new FanoutLimiter(this, currentCycleLTDimMultMaxDim, 8);
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+			/*Read matrix to ram*/
+			DFEVar matrixRamWriteCond = curCycleLTDimMultMaxDimFanout.get() ? matrixRamIter[i]:0;
+			matrixRamPort[i] 		 = mem.makeRamPortParams(RamPortMode.READ_WRITE, matrixRamAddressFanout.get(), floatType)
+										    .withDataIn(inputMatrixFanout.get())
+										    .withWriteEnable(matrixRamWriteCond );
+			matrixRam[i] 			 = mem.ram(MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, matrixRamPort[i]).cast(floatType);
+			matrixRamWriteCond.watch("enIt_" + i);
+			matrixRamWriteCond.watch("matrixRamWriteCond_" + i );
+			matrixRam[i].watch("matrixRAM_" + i);
+
+			//X Init Ram Staff
+
+			int iMultC = i * C;
+			DFEVar ramCond = initRamCurCycleFanout.get() >= iMultC & initRamCurCycleFanout.get() < iMultC + C;
+			ramCond.watch("ramCond_" + i);
+			(currentCycleFanout.get() >=iMultC & currentCycleFanout.get() < iMultC + C).watch("preloadInitRamCond");
+			/*Reading init value to first init ram*/
+			DFEVar inPreLoadCond 		= curCycleLTCMultMaxDimFanout.get() ? initRamIter[i]:0;
+			inPreLoadCond.watch("preLoadCond_" + i);
+			DFEVar firstRamWriteCond 	= (inPreLoadCond)|(isNotProcessLastBlksFanout.get()&(~isReadFirstInitRamFanout.get())&ramCond);
+
+			/*Reading init value to second init ram*/
+			DFEVar secondRamWriteCond = ramCond & isReadFirstInitRamFanout.get() & currentCycleFanout.get() < lastBlksStartCycleFanout.get();
+			DFEVar readAddress  = isReadFirstInitRam ? xFirstInitPreloadAddrFanout.get():xSecondInitRamAddrFanout.get();
+			DFEVar writeAddress = firstRamWriteCond ? xFirstInitPreloadAddrFanout.get():xSecondInitRamAddrFanout.get();
+			//DFEVar writeCond = firstRamWriteCond ?firstRamWriteCond:secondRamWriteCond;
+			DFEVar writeCond = firstRamWriteCond | secondRamWriteCond;
+			initRamReadPort[i] = mem.makeRamPortParams(RamPortMode.READ_ONLY, readAddress, floatType);
+			initRamWritePort[i]= mem.makeRamPortParams(RamPortMode.WRITE_ONLY, writeAddress, floatType)
+		    .withDataIn(inputInitDataFanout.get())
+		    .withWriteEnable(writeCond);
+
+
+			xInitRam[i]	= mem.ramDualPort(X_RAM_DEPTH, RamWriteMode.READ_FIRST, initRamReadPort[i], initRamWritePort[i]);
+			xFirstInitRam[i]= xInitRam[i].getOutputA();
+			xSecondInitRam[i]= xInitRam[i].getOutputA();
+			xFirstInitRam[i].watch("FirstInitRam_" + i);
+			xSecondInitRam[i].watch("SecondInitRam_" + i);
+
+
+		}
+
+
+		/*x and z used for saving C solutions result,  the final element  x[k][dimActual - 1] or z[k][dimActualDim - 1] will
+		 * start to be updated  when ci.eq(dimActualLen) and after C cycles, all the elements in x  or z are updated.
+		 *  */
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+			xRamBufferEx[i] = floatType.newInstance(this);
+			zRamBufferEx[i] = floatType.newInstance(this);
+		}
+		DFEVar diagAInputCond                  = currentCycle < dimActualLen;
+		DFEVar inputDiagA                      = io.input("DiagA", ioType, diagAInputCond).cast(floatType);
+		DFEVar diagRamPreloadAddress           = control.count.simpleCounter(32, dimActualLen).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));
+		CounterChain diagRamAddressChain      = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar diagRamComputeAddress           = diagRamAddressChain.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));
+		diagRamAddressChain.addCounter(C, 1);
+		DFEVar diagRamAddress                  = (currentCycleLTDimMultDim) ? diagRamPreloadAddress:diagRamComputeAddress;
+		RamPortParams<DFEVar> diagRamPort      = mem.makeRamPortParams(RamPortMode.READ_WRITE, diagRamAddress, floatType) .withDataIn(inputDiagA) .withWriteEnable(diagAInputCond);
+		DFEVar diagRam                         = mem.ram(MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, diagRamPort);
+
+		inputDiagA.watch("inputDiagA");
+		diagRam.watch("diagRam");
+		diagRamComputeAddress.watch("diagRamComputeAddress");
+		diagRamAddress.watch("diagRamAddress");
+		diagRamPreloadAddress.watch("diagRamPreloadAddress");
+		/*For each solution's sigma, there should be dim value's to be added together*/
+
+		DFEVar mul[]                       = new DFEVar[MAX_DIM_LEN + 1 ];
+		DFEVar isReadXInit                 = computeCycle < cMultDim;
+		DFEVar diagMultResult[]            = new DFEVar[MAX_DIM_LEN];
+		DFEVar multValue;
+		DFEVar ciEQi;
+		DFEVar xPossibleValues[]           = new DFEVar[8];
+		DFEVar xSelect                     = isReadXInit#isReadFirstInitRam#isReadFromX;
+		xSelect.watch("xSelect");
+		isReadXInit.watch("isReadXInit");
+
+		FanoutLimiter xSelectFanout       = new FanoutLimiter(this, xSelect, 8);
+		FanoutLimiter ciFanout            = new FanoutLimiter(this, ci, 8);
+		FanoutLimiter dimActualLenFanout  = new FanoutLimiter(this, dimActualLen, 8);
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+
+			xPossibleValues[0] = xPossibleValues[2] = zRamBufferEx[i];
+			xPossibleValues[1] = xPossibleValues[3] = xRamBufferEx[i];
+			xPossibleValues[4] = xPossibleValues[5] = xSecondInitRam[i];
+			xPossibleValues[6] = xPossibleValues[7] = xFirstInitRam[i];
+
+			DFEVar xValue 	  = control.mux(xSelectFanout.get(), xPossibleValues);
+			xValue.watch("xValue_" + i);
+			optimization.pushPipeliningFactor(pipeLineFactor);
+			multValue 		 = matrixRam[i] * xValue;
+			ciEQi = (ciFanout.get()).eq(i);
+			mul[i] =(ciEQi | i>=dimActualLenFanout.get()) ? 0:-multValue;
+			diagMultResult[i] = (ciEQi) ?  multValue : mul[i];
+			optimization.popPipeliningFactor();
+			mul[i].watch("mul_" +i);
+			xValue.watch("x_" + i);
+		}
+
+		/*Using newValue[k] to update x[k][i] or z[k][i], depends on the which one is read currently.*/
+		CounterChain chainB = control.count.makeCounterChain(~isPreLoadData);
+		DFEVar bi = chainB.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN )));
+		chainB.addCounter(C, 1);
+		//mul[mul.length-1] = control.mux(bi,bRam);
+		mul[mul.length-1] = bValue;
+		DFEVar sigma = null;
+		if(isUseFPMA)
+		{
+			FloatingPointMultiAdder fpma = new FloatingPointMultiAdder(this, 4, false);
+			sigma = fpma.compute(mul);
+		}
+		else
+		{
+			sigma = caculateSum(mul);
+		}
+
+		sigma.watch("sigma");
+		DFEVar newValue = sigma;
+		newValue.watch("newValue");
+		bi.watch("bi");
+
+		/*for in the second dim cycles, ck is just beginning enable, while in the start of second dim cycle,  we need to use x as new multiplier
+		 * so in first dim cycles, we need to update x,
+		 * */
+		isReadFromX.watch("isReadFromX");
+		DFEVar commonCond;
+
+		DFEVar inputData = stream.offset(newValue, -C);
+		FanoutLimiter inputDataFanout   = new FanoutLimiter(this, inputData, 8);
+		FanoutLimiter isReadFromXFanout = new FanoutLimiter(this, isReadFromX, 8);
+		FanoutLimiter xRamAddressFanout = new FanoutLimiter(this, ck.cast(dfeUInt(bitWidth)), 8);
+		FanoutLimiter zRamAddressFanout = new FanoutLimiter(this, C+ck.cast(dfeUInt(bitWidth)), 8);
+
+
+
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+			commonCond          = ciFanout.get().eq(i) & (notPreloadFanout.get());
+			ci.eq(i).watch("ciEQi_" + i);
+			/*Used for updating ram X*/
+			DFEVar xRamWriteCond = stream.offset((commonCond & ~isReadFromXFanout.get() ), -C);
+
+			/*Used for updating ram X*/
+			DFEVar zRamWriteCond = stream.offset((commonCond & isReadFromXFanout.get() ), -C);
+
+
+			DFEVar readAddress  = isReadFromX ? xRamAddressFanout.get():zRamAddressFanout.get();
+			DFEVar writeAddress = xRamWriteCond ? xRamAddressFanout.get():zRamAddressFanout.get();
+			DFEVar writeCond = xRamWriteCond | zRamWriteCond;
+			xzRamReadPort[i] = mem.makeRamPortParams(RamPortMode.READ_ONLY, readAddress, floatType);
+			xzRamWritePort[i]= mem.makeRamPortParams(RamPortMode.WRITE_ONLY, writeAddress, floatType)
+		    .withDataIn(inputDataFanout.get())
+		    .withWriteEnable(writeCond);
+
+			xzRamEx[i]	= mem.ramDualPort(X_RAM_DEPTH, RamWriteMode.READ_FIRST, xzRamReadPort[i], xzRamWritePort[i]);
+			xRamBufferEx[i] <== (ci === 0 & xRamWriteCond) ? inputDataFanout.get() : xzRamEx[i].getOutputA();
+			zRamBufferEx[i] <== (ci === 0 & zRamWriteCond) ? inputDataFanout.get() : xzRamEx[i].getOutputA();
+
+
+			xRamBufferEx[i].watch("xRamBufferEx_" + i);
+			zRamBufferEx[i].watch("zRamBufferEx_" + i);
+			xRamWriteCond.watch("xRamWriteCond_" + i);
+			zRamWriteCond.watch("zRamWriteCond_" + i);
+		}
+
+		DFEVar result = newValue;
+		io.output("result", result.cast(ioType), ioType, iter.eq(maxIterTimes - 1));
+
+
+		/*Error Check Part*/
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+			diagMultResult[i].watch("diagMultResult_" + i);
+		}
+
+		List<DFEVar> inputs = new ArrayList<DFEVar>();
+		for(int i = 0; i < MAX_DIM_LEN; i ++)
+		{
+			inputs.add(diagMultResult[i]);
+		}
+		DFEVar diagMult = pipelinedMux(ci, inputs);
+		diagMult.watch("diagMult");
+		//DFEVar diagMult        = control.mux(ci, diagMultResult);
+		DFEVar partialErrorSum = floatType.newInstance(this);
+		DFEVar sum             = (ci.eq(0)) ? 0: partialErrorSum;
+		DFEVar newErrorSum     = KernelMath.abs(diagMult - sigma*diagRam) + sum;
+		partialErrorSum 		  <== stream.offset(newErrorSum, -C);
+
+		diagMult.watch("diagMult");
+		partialErrorSum.watch("partialSum");
+		sum.watch("sum");
+		newErrorSum.watch("newErrorSum");
+		KernelMath.abs(diagMult - sigma*diagRam).watch("absValue2");
+
+		optimization.pushPipeliningFactor(pipeLineFactor);
+		io.output("error", newErrorSum.cast(ioType), ioType,  iter.eq(maxIterTimes - 1) & ci.cast(dfeUInt(32)).eq(dimActualLen - 1) );
+	}
+	public static DFEVar pipelinedMux(DFEVar sel, List<DFEVar> inputs) {
+		Kernel kernel  = sel.getKernel();
+		int numInputs  = inputs.size();
+
+		int selectBitsRequired = MathUtils.bitsToAddress(numInputs);
+		if (selectBitsRequired > sel.getType().getTotalBits())
+			throw new AssertionError("Too many inputs (" + numInputs + ") for a " + sel.getType().getTotalBits() + "-bit select.");
+
+		if (numInputs == 1)
+			return inputs[0];
+
+		sel = sel.slice(0, selectBitsRequired);
+		int selectBits = sel.getType().getTotalBits();
+
+		DFEVar result;
+		kernel.optimization.pushPipeliningFactor(1.0);
+
+		if (selectBits <= 2) {
+			// Build mux directly if LUT6s can be used
+			result = kernel.control.mux(sel, inputs);
+		}
+		else {
+			DFEVar selectMSBs, selectLSBs;
+			int maxSubInputs;
+
+			if (selectBits % 2 == 0) {
+				// Create a 4-input mux
+				selectMSBs = sel.slice(selectBits-2, 2);
+				selectLSBs = sel.slice(0, selectBits-2);
+				maxSubInputs = 1<<(selectBits-2);
+			}
+			else {
+				// Create a 2-input mux
+				selectMSBs = sel.slice(selectBits-1, 1);
+				selectLSBs = sel.slice(0, selectBits-1);
+				maxSubInputs = 1<<(selectBits-1);
+			}
+
+			List<List<DFEVar>> subInputs = splitList(maxSubInputs, inputs);
+
+			DFEVar[] selected = new DFEVar[subInputs.size()];
+			for (int i=0; i<subInputs.size(); i++)
+				selected[i] = pipelinedMux(selectLSBs, subInputs[i]);
+
+			result = kernel.control.mux(selectMSBs, selected);
+		}
+
+		kernel.optimization.popPipeliningFactor();
+		return result;
+	}
+
+	public static <T> List<List<T>> splitList(int limit, List<T> inputs) {
+		List<List<T>> partialLists = new ArrayList<List<T>>();
+
+		for (int fromIndex=0; fromIndex<inputs.size(); fromIndex+=limit) {
+			int toIndex = Math.min(fromIndex + limit, inputs.size());
+			partialLists.add(inputs.subList(fromIndex, toIndex));
+		}
+
+		return partialLists;
+	}
+
+	public  DFEVar caculateSum(DFEVar data[])
+	{
+		//int N = data.length - latency + 1 ;
+		int N = data.length ;
+		int layerLastNodeIndex[] = {0, 2, 6, 14, 30,62,126,254,510};
+		int layerNodes[] = {1,2,4,8,16,32,64,128,256,512};
+		int totalLayers = (int)(Math.floor(Math.log(N) / Math.log(2)) + 1);
+
+		DFEVar leftValue  = constant.var(floatType, 0);
+		DFEVar rightValue = constant.var(floatType, 0);
+
+
+
+		for(int j = layerLastNodeIndex[totalLayers - 2];j >(layerLastNodeIndex[totalLayers- 2] - layerNodes[totalLayers - 2]); j -- )
+		{
+			if( (2 * j + 1) < N)
+			{
+				leftValue = data[2 * j + 1];
+			}
+			else
+			{
+				leftValue = constant.var(floatType, 0);
+			}
+			if(2 * j + 2 < N)
+			{
+				rightValue = data[2 * j + 2];
+			}
+			else
+			{
+				rightValue = constant.var(floatType, 0);
+			}
+			data[j] =  data[j] + leftValue + rightValue;
+		}
+
+		for(int i = totalLayers - 2; i > 0; i --)
+		{
+			for(int j = layerLastNodeIndex[i - 1]; j >(layerLastNodeIndex[i - 1] - layerNodes[i - 1]); j --)
+			{
+				data[j] =  data[j] + data[2 * j + 1] + data[2 * j + 2];
+			}
+		}
+
+		return data[0];
+	}
+
+}
+
