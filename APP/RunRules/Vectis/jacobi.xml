@@ -30,6 +30,7 @@
                 <pathelement path="${env.ANT_MAXELER_INTERNAL_MAXIDE_JARS}"/>
                 <pathelement path="../RunRules/Vectis/dist/bin"/>
                 <pathelement path="${maxcompilerdirpath}"/>
+                <pathelement path="../../maxpower/bin"/>
                 <pathelement path="${EnvClassPath}"/>
             </classpath>
         </java>
