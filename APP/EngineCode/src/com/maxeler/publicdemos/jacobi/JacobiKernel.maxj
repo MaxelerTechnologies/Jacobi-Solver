@@ -82,12 +82,12 @@ public class JacobiKernel extends Kernel {
 		DFEVar ck              = chain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));//loop k
 		DFEVar isReadFromX     = iter[0].eq(1);
 
-		preLoadCycles.watch("preLoadCycles");
-		isPreLoadData.watch("isReadPreLoad");
-		currentCycle.watch("currentCycle");
-		iter.watch("iter");
-		ci.watch("ci");
-		ck.watch("ck");
+		preLoadCycles.simWatch("preLoadCycles");
+		isPreLoadData.simWatch("isReadPreLoad");
+		currentCycle.simWatch("currentCycle");
+		iter.simWatch("iter");
+		ci.simWatch("ci");
+		ck.simWatch("ck");
 
 		//Matrix A related staff
 		DFEVar currentCycleLTDimMultDim              = currentCycle < dimMultDim;
@@ -97,8 +97,8 @@ public class JacobiKernel extends Kernel {
 		DFEVar matrixRamReadAddress                  = matrixRamReadAddressChain.addCounter(dimActualLen, 1).cast(dfeUInt(MathUtils.bitsToAddress(MAX_DIM_LEN)));
 		matrixRamReadAddressChain.addCounter(C, 1);
 		DFEVar matrixRamAddress                      = (currentCycleLTDimMultDim) ? ramPreloadAddress:matrixRamReadAddress;
-		inputMatrix.watch("inputMatrix");
-		matrixRamAddress.watch("ramAddress");
+		inputMatrix.simWatch("inputMatrix");
+		matrixRamAddress.simWatch("ramAddress");
 
 		//B Related Staff
 		DFEVar inputB                                = io.input("B", ioType, (~isPreLoadData & iter.eq(0))).cast(floatType);
@@ -106,8 +106,8 @@ public class JacobiKernel extends Kernel {
 		DFEVar bRamReadAddress                       = bRamAddressChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
 		DFEVar bCurrentCycle                         = control.count.makeCounterChain(~isPreLoadData).addCounter(eachBlockCycles, 1);
 
-		bRamReadAddress.watch("bRamReadAddress");
-		inputB.watch("inputB");
+		bRamReadAddress.simWatch("bRamReadAddress");
+		inputB.simWatch("inputB");
 		DFEVar isNotPreLoadData                      = ~isPreLoadData;
 		FanoutLimiter notPreloadFanout              = new FanoutLimiter(this, isNotPreLoadData, 8);
 
@@ -118,8 +118,8 @@ public class JacobiKernel extends Kernel {
 		DFEVar singleBRamWriteCond = bCurrentCycle < dimActualLen * C;
 		RamPortParams<DFEVar> singleBRamPort      = mem.makeRamPortParams(RamPortMode.READ_WRITE, singleBRamAddr, floatType) .withDataIn(inputB).withWriteEnable(singleBRamWriteCond);
 		DFEVar bValue                         = mem.ram(C*MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, singleBRamPort);
-		bValue.watch("bValue");
-		singleBRamAddr.watch("singleBRamAddress");
+		bValue.simWatch("bValue");
+		singleBRamAddr.simWatch("singleBRamAddress");
 
 
 		//X Init Ram Staff
@@ -127,48 +127,48 @@ public class JacobiKernel extends Kernel {
 		DFEVar initRamSelectCnt    	= initRamChain.addCounter(2, 1);
 		DFEVar initRamCurCycle     	= initRamChain.addCounter(eachBlockCycles, 1);
 		DFEVar isReadFirstInitRam  	= initRamSelectCnt.eq(0);
-		initRamSelectCnt.watch("initRamSelectCnt");
+		initRamSelectCnt.simWatch("initRamSelectCnt");
 
 		/*Last block init value do not need to read into init ram, because last block init values were read in the previous block cycles*/
 		DFEVar lastBlksStartCycle   = totalCycles - eachBlockCycles;
 		DFEVar isNotProcessLastBlks = ~isPreLoadData & currentCycle < lastBlksStartCycle;
 		DFEVar initInputCond        = (isPreLoadData & currentCycle < cMultDim) |  ( isNotProcessLastBlks&iter.eq(0));
 		DFEVar x_trans_init         = io.input("x_trans_init", ioType, initInputCond).cast(floatType);
-		initInputCond.watch("cond");
-		x_trans_init.watch("x_trans_init");
+		initInputCond.simWatch("cond");
+		x_trans_init.simWatch("x_trans_init");
 
 		/*First X Init Ram Staff*/
 		/*in the preload cycles ,we need to load init value to init value, so first ram's  counter chain should be enable in the beginning, but second ram do not need*/
 		CounterChain xFirstInitRamAddressChain  = control.count.makeCounterChain();
 		DFEVar xFirstInitPreloadAddress          = xFirstInitRamAddressChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
-		xFirstInitPreloadAddress.watch("xFirstInitRamAddress");
+		xFirstInitPreloadAddress.simWatch("xFirstInitRamAddress");
 
 		CounterChain xFirstInitRamReadChain     = control.count.makeCounterChain(~isPreLoadData);
 		DFEVar xFirstInitReadAddress             = xFirstInitRamReadChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
 
 		DFEVar firstInitRamAddress = (currentCycle < cMultDim)  ? xFirstInitPreloadAddress : xFirstInitReadAddress;
 		xFirstInitPreloadAddress  = firstInitRamAddress;
-		firstInitRamAddress.watch("address");
-		xFirstInitPreloadAddress.watch("xFirstInitPreloadAddress");
-		xFirstInitReadAddress.watch("xFirstInitReadAddress");
+		firstInitRamAddress.simWatch("address");
+		xFirstInitPreloadAddress.simWatch("xFirstInitPreloadAddress");
+		xFirstInitReadAddress.simWatch("xFirstInitReadAddress");
 
 		/*Second init Ram staff*/
 		CounterChain xSecInitRamChain = control.count.makeCounterChain(~isPreLoadData);
 		DFEVar xSecondInitRamAddress   = xSecInitRamChain.addCounter(C, 1).cast(dfeUInt(MathUtils.bitsToAddress(C)));
-		xSecondInitRamAddress.watch("xSecondInitRamAddress");
+		xSecondInitRamAddress.simWatch("xSecondInitRamAddress");
 
 		//EnableIterator used for matrix Ram
 		Counter matrixCounter  = control.count.makeCounter(control.count.makeParams(32).withMax(dimActualLen));
 		DFEVar currentCycleLTDimMultMaxDim  = currentCycle<dimActualLen*MAX_DIM_LEN;
 		DFEVar matrixRamConsume             = matrixCounter.getWrap()&currentCycleLTDimMultMaxDim;
-		matrixRamConsume.watch("matrixRamConsume");
+		matrixRamConsume.simWatch("matrixRamConsume");
 		EnableIterator matrixRamIter       = new EnableIterator(this, "matrixRamIter", MAX_DIM_LEN, matrixRamConsume);
 
 		//EnableIterator used for X first init ram, only used in preload cycle
 		Counter initRamCounter                      = control.count.makeCounter(control.count.makeParams(32).withMax(C));
 		DFEVar currentCycleLTCMultMaxDim             = currentCycle < C*MAX_DIM_LEN;
 		DFEVar initRamConsume                        = initRamCounter.getWrap() & currentCycleLTCMultMaxDim;
-		initRamConsume.watch("initRamConsume");
+		initRamConsume.simWatch("initRamConsume");
 		EnableIterator initRamIter                  = new EnableIterator(this, "initRamIter", MAX_DIM_LEN, initRamConsume);
 
 		DFEVar inputInitData                         = x_trans_init;
@@ -193,19 +193,19 @@ public class JacobiKernel extends Kernel {
 										    .withDataIn(inputMatrixFanout.get())
 										    .withWriteEnable(matrixRamWriteCond );
 			matrixRam[i] 			 = mem.ram(MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, matrixRamPort[i]).cast(floatType);
-			matrixRamWriteCond.watch("enIt_" + i);
-			matrixRamWriteCond.watch("matrixRamWriteCond_" + i );
-			matrixRam[i].watch("matrixRAM_" + i);
+			matrixRamWriteCond.simWatch("enIt_" + i);
+			matrixRamWriteCond.simWatch("matrixRamWriteCond_" + i );
+			matrixRam[i].simWatch("matrixRAM_" + i);
 
 			//X Init Ram Staff
 
 			int iMultC = i * C;
 			DFEVar ramCond = initRamCurCycleFanout.get() >= iMultC & initRamCurCycleFanout.get() < iMultC + C;
-			ramCond.watch("ramCond_" + i);
-			(currentCycleFanout.get() >=iMultC & currentCycleFanout.get() < iMultC + C).watch("preloadInitRamCond");
+			ramCond.simWatch("ramCond_" + i);
+			(currentCycleFanout.get() >=iMultC & currentCycleFanout.get() < iMultC + C).simWatch("preloadInitRamCond");
 			/*Reading init value to first init ram*/
 			DFEVar inPreLoadCond 		= curCycleLTCMultMaxDimFanout.get() ? initRamIter[i]:0;
-			inPreLoadCond.watch("preLoadCond_" + i);
+			inPreLoadCond.simWatch("preLoadCond_" + i);
 			DFEVar firstRamWriteCond 	= (inPreLoadCond)|(isNotProcessLastBlksFanout.get()&(~isReadFirstInitRamFanout.get())&ramCond);
 
 			/*Reading init value to second init ram*/
@@ -223,8 +223,8 @@ public class JacobiKernel extends Kernel {
 			xInitRam[i]	= mem.ramDualPort(X_RAM_DEPTH, RamWriteMode.READ_FIRST, initRamReadPort[i], initRamWritePort[i]);
 			xFirstInitRam[i]= xInitRam[i].getOutputA();
 			xSecondInitRam[i]= xInitRam[i].getOutputA();
-			xFirstInitRam[i].watch("FirstInitRam_" + i);
-			xSecondInitRam[i].watch("SecondInitRam_" + i);
+			xFirstInitRam[i].simWatch("FirstInitRam_" + i);
+			xSecondInitRam[i].simWatch("SecondInitRam_" + i);
 
 
 		}
@@ -248,11 +248,11 @@ public class JacobiKernel extends Kernel {
 		RamPortParams<DFEVar> diagRamPort      = mem.makeRamPortParams(RamPortMode.READ_WRITE, diagRamAddress, floatType) .withDataIn(inputDiagA) .withWriteEnable(diagAInputCond);
 		DFEVar diagRam                         = mem.ram(MAX_DIM_LEN, Mem.RamWriteMode.WRITE_FIRST, diagRamPort);
 
-		inputDiagA.watch("inputDiagA");
-		diagRam.watch("diagRam");
-		diagRamComputeAddress.watch("diagRamComputeAddress");
-		diagRamAddress.watch("diagRamAddress");
-		diagRamPreloadAddress.watch("diagRamPreloadAddress");
+		inputDiagA.simWatch("inputDiagA");
+		diagRam.simWatch("diagRam");
+		diagRamComputeAddress.simWatch("diagRamComputeAddress");
+		diagRamAddress.simWatch("diagRamAddress");
+		diagRamPreloadAddress.simWatch("diagRamPreloadAddress");
 		/*For each solution's sigma, there should be dim value's to be added together*/
 
 		DFEVar mul[]                       = new DFEVar[MAX_DIM_LEN + 1 ];
@@ -262,8 +262,8 @@ public class JacobiKernel extends Kernel {
 		DFEVar ciEQi;
 		DFEVar xPossibleValues[]           = new DFEVar[8];
 		DFEVar xSelect                     = isReadXInit#isReadFirstInitRam#isReadFromX;
-		xSelect.watch("xSelect");
-		isReadXInit.watch("isReadXInit");
+		xSelect.simWatch("xSelect");
+		isReadXInit.simWatch("isReadXInit");
 
 		FanoutLimiter xSelectFanout       = new FanoutLimiter(this, xSelect, 8);
 		FanoutLimiter ciFanout            = new FanoutLimiter(this, ci, 8);
@@ -277,15 +277,15 @@ public class JacobiKernel extends Kernel {
 			xPossibleValues[6] = xPossibleValues[7] = xFirstInitRam[i];
 
 			DFEVar xValue 	  = control.mux(xSelectFanout.get(), xPossibleValues);
-			xValue.watch("xValue_" + i);
+			xValue.simWatch("xValue_" + i);
 			optimization.pushPipeliningFactor(pipeLineFactor);
 			multValue 		 = matrixRam[i] * xValue;
 			ciEQi = (ciFanout.get()).eq(i);
 			mul[i] =(ciEQi | i>=dimActualLenFanout.get()) ? 0:-multValue;
 			diagMultResult[i] = (ciEQi) ?  multValue : mul[i];
 			optimization.popPipeliningFactor();
-			mul[i].watch("mul_" +i);
-			xValue.watch("x_" + i);
+			mul[i].simWatch("mul_" +i);
+			xValue.simWatch("x_" + i);
 		}
 
 		/*Using newValue[k] to update x[k][i] or z[k][i], depends on the which one is read currently.*/
@@ -304,15 +304,15 @@ public class JacobiKernel extends Kernel {
 			sigma = caculateSum(mul);
 		}
 
-		sigma.watch("sigma");
+		sigma.simWatch("sigma");
 		DFEVar newValue = sigma;
-		newValue.watch("newValue");
-		bi.watch("bi");
+		newValue.simWatch("newValue");
+		bi.simWatch("bi");
 
 		/*for in the second dim cycles, ck is just beginning enable, while in the start of second dim cycle,  we need to use x as new multiplier
 		 * so in first dim cycles, we need to update x,
 		 * */
-		isReadFromX.watch("isReadFromX");
+		isReadFromX.simWatch("isReadFromX");
 		DFEVar commonCond;
 
 		DFEVar inputData = stream.offset(newValue, -C);
@@ -326,7 +326,7 @@ public class JacobiKernel extends Kernel {
 		for(int i = 0; i < MAX_DIM_LEN; i ++)
 		{
 			commonCond          = ciFanout.get().eq(i) & (notPreloadFanout.get());
-			ci.eq(i).watch("ciEQi_" + i);
+			ci.eq(i).simWatch("ciEQi_" + i);
 			/*Used for updating ram X*/
 			DFEVar xRamWriteCond = stream.offset((commonCond & ~isReadFromXFanout.get() ), -C);
 
@@ -347,10 +347,10 @@ public class JacobiKernel extends Kernel {
 			zRamBufferEx[i] <== (ci === 0 & zRamWriteCond) ? inputDataFanout.get() : xzRamEx[i].getOutputA();
 
 
-			xRamBufferEx[i].watch("xRamBufferEx_" + i);
-			zRamBufferEx[i].watch("zRamBufferEx_" + i);
-			xRamWriteCond.watch("xRamWriteCond_" + i);
-			zRamWriteCond.watch("zRamWriteCond_" + i);
+			xRamBufferEx[i].simWatch("xRamBufferEx_" + i);
+			zRamBufferEx[i].simWatch("zRamBufferEx_" + i);
+			xRamWriteCond.simWatch("xRamWriteCond_" + i);
+			zRamWriteCond.simWatch("zRamWriteCond_" + i);
 		}
 
 		DFEVar result = newValue;
@@ -360,7 +360,7 @@ public class JacobiKernel extends Kernel {
 		/*Error Check Part*/
 		for(int i = 0; i < MAX_DIM_LEN; i ++)
 		{
-			diagMultResult[i].watch("diagMultResult_" + i);
+			diagMultResult[i].simWatch("diagMultResult_" + i);
 		}
 
 		List<DFEVar> inputs = new ArrayList<DFEVar>();
@@ -369,18 +369,18 @@ public class JacobiKernel extends Kernel {
 			inputs.add(diagMultResult[i]);
 		}
 		DFEVar diagMult = pipelinedMux(ci, inputs);
-		diagMult.watch("diagMult");
+		diagMult.simWatch("diagMult");
 		//DFEVar diagMult        = control.mux(ci, diagMultResult);
 		DFEVar partialErrorSum = floatType.newInstance(this);
 		DFEVar sum             = (ci.eq(0)) ? 0: partialErrorSum;
 		DFEVar newErrorSum     = KernelMath.abs(diagMult - sigma*diagRam) + sum;
 		partialErrorSum 		  <== stream.offset(newErrorSum, -C);
 
-		diagMult.watch("diagMult");
-		partialErrorSum.watch("partialSum");
-		sum.watch("sum");
-		newErrorSum.watch("newErrorSum");
-		KernelMath.abs(diagMult - sigma*diagRam).watch("absValue2");
+		diagMult.simWatch("diagMult");
+		partialErrorSum.simWatch("partialSum");
+		sum.simWatch("sum");
+		newErrorSum.simWatch("newErrorSum");
+		KernelMath.abs(diagMult - sigma*diagRam).simWatch("absValue2");
 
 		optimization.pushPipeliningFactor(pipeLineFactor);
 		io.output("error", newErrorSum.cast(ioType), ioType,  iter.eq(maxIterTimes - 1) & ci.cast(dfeUInt(32)).eq(dimActualLen - 1) );
