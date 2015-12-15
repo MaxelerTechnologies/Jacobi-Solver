@@ -28,6 +28,8 @@ public class JacobiKernel extends Kernel {
 	private final  int C;
 	private final  int MAX_DIM_LEN;
 
+	private final  int FPMA_GUARD_BITS = 4;
+
 
 	public  JacobiKernel(KernelParameters parameters, JacobiAppParams params)
 	{
@@ -295,8 +297,7 @@ public class JacobiKernel extends Kernel {
 		DFEVar sigma = null;
 		if(isUseFPMA)
 		{
-			FloatingPointMultiAdder fpma = new FloatingPointMultiAdder(this, 4, false);
-			sigma = fpma.compute(mul);
+			sigma = FloatingPointMultiAdder.add(FPMA_GUARD_BITS, mul);
 		}
 		else
 		{
