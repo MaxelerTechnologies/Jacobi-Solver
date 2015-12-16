@@ -1,0 +1,59 @@
+#
+# Jacobi-Solver
+#
+# Required variables:
+#  - MAXCOMPILER_SIM_IMAGE: image with MaxCompiler and MaxCompiler Simulator
+#  - MAXCOMPILER_DFE_IMAGE: image with MaxCompiler and Quartus II
+#
+
+stages:
+- make-sim
+- make-dfe
+
+before_script:
+ # Fetch submodules
+ - git submodule update --init --recursive
+ # Build maxpower library
+ - source maxpower/config.sh
+ - ant -f maxpower/build.xml compile
+
+make-sim-Jacobi-Solver:
+  image: $MAXCOMPILER_SIM_IMAGE
+  script:
+  - make -C APP/CPUCode RUNRULE='Simulation'
+  - make -C APP/CPUCode RUNRULE='Simulation' runsim
+  stage: make-sim
+  tags:
+  - maxcompiler-sim
+
+make-Maia-Jacobi-Solver:
+  image: $MAXCOMPILER_DFE_IMAGE
+  script:
+  - make -C APP/CPUCode RUNRULE='Maia'
+  stage: make-dfe
+  tags:
+  - maxcompiler-dfe
+
+make-Coria-Jacobi-Solver:
+  image: $MAXCOMPILER_DFE_IMAGE
+  script:
+  - make -C APP/CPUCode RUNRULE='Coria'
+  stage: make-dfe
+  tags:
+  - maxcompiler-dfe
+
+make-Isca-Jacobi-Solver:
+  image: $MAXCOMPILER_DFE_IMAGE
+  script:
+  - make -C APP/CPUCode RUNRULE='Isca'
+  stage: make-dfe
+  tags:
+  - maxcompiler-dfe
+
+make-Galava-Jacobi-Solver:
+  image: $MAXCOMPILER_DFE_IMAGE
+  script:
+  - make -C APP/CPUCode RUNRULE='Galava'
+  stage: make-dfe
+  tags:
+  - maxcompiler-dfe
