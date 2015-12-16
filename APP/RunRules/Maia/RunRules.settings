@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<buildProfile>
+<common>
+<boardModel type="MAIA"/>
+<simulation enabled="false"/>
+<enableMPCX enabled="false"/>
+<programArgument argument="MPPREndCT" value="16"/>
+<programArgument argument="MPPRThreads" value="1"/>
+</common>
+<maxFiles>
+<maxFile buildName="jacobi" buildOrUseExisting="build">
+<runConfiguration askBeforeAutoBuild="true">
+<mainClass>com.maxeler.publicdemos.jacobi.JacobiBuilder</mainClass>
+<maxHeapSize>2</maxHeapSize>
+<programArgument argument="C" value="62"/>
+</runConfiguration>
+<selectEngineTarget enabled="false">VECTIS</selectEngineTarget>
+<overrideEnableMPCX enabled="false" value="false"/>
+</maxFile>
+</maxFiles>
+<cpuCode targetType="executable">
+<libraryName/>
+<exeName>jacobi</exeName>
+<skin>
+<ancillaryReleaseInformation enabled="false">
+<dir name=""/>
+</ancillaryReleaseInformation>
+</skin>
+<arguments>-d 2 -b 16</arguments>
+<remoteExecution enabled="false">
+<remoteMachineName/>
+<scriptName/>
+</remoteExecution>
+<customDefinitions>USE_SLIC:=1</customDefinitions>
+</cpuCode>
+<simulator>
+<deleteDRAM enabled="false"/>
+<maxDRAMSize enabled="false"/>
+<DRAMFile enabled="false"/>
+<socketName>JacobiSolver</socketName>
+<startStopScript enabled="false"/>
+<numberOfDevices>1</numberOfDevices>
+<ethernetOneEnabled enabled="false"/>
+<ipAddressOne/>
+<netmaskOne/>
+<pcapFileOne/>
+<ethernetTwoEnabled enabled="false"/>
+<ipAddressTwo/>
+<netmaskTwo/>
+<pcapFileTwo/>
+</simulator>
+</buildProfile>

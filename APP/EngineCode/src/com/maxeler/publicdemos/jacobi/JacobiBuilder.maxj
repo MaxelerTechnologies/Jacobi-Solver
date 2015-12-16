@@ -30,7 +30,7 @@ public class JacobiBuilder {
 		Kernel k = new JacobiKernel( m.makeKernelParameters("JacobiKernel"), params);
 
 		m.setKernel(k);
-		m.setIO(IOType.ALL_PCIE);
+		m.setIO(IOType.ALL_CPU);
 		m.createSLiCinterface(modeDefault(params));//addMode(modeDefault(params));
 		m.build();
 	}
