@@ -22,8 +22,9 @@ public class JacobiBuilder {
 		m.setClockFrequency(params.getClockFrequency());
 		BuildConfig build_config = new BuildConfig(Level.FULL_BUILD);
 		build_config.setBuildEffort(Effort.VERY_HIGH);
-		build_config.setMPPRCostTableSearchRange( 1, 8 );
-		build_config.setMPPRParallelism( 2 );
+		build_config.setMPPRCostTableSearchRange(m.getEngineParameters().
+				getMPPRStartCT(), m.getEngineParameters().getMPPREndCT());
+		build_config.setMPPRParallelism(m.getEngineParameters().getMPPRThreads());
 		m.setBuildConfig(build_config);
 
 
